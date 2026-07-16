@@ -1,0 +1,251 @@
+-- ============================================================================
+--  eGESVEN - Sistema de Gestion de Ventas Electronica
+--  Modelo fisico Oracle  |  Version 2.0
+--  Requiere Oracle 12c o superior (usa columnas IDENTITY)
+-- ============================================================================
+--  Trazabilidad con el documento ATAM:
+--    - USUARIO_SISTEMA centraliza la autenticacion (base del ServicioMFA,
+--      Decision 1 del ATAM).
+--    - PEDIDO incorpora SUBTOTAL, IMPUESTO y COSTO_ENVIO: corrige el Riesgo 4
+--      (RF008) mediante la Medida 4 del ATAM.
+--    - DETALLE_PEDIDO congela PRECIO_UNITARIO al momento de la compra.
+--    - MEDIO_PAGO es el catalogo de proveedores: solo Transbank y PayPal
+--      (Restriccion 8). El token pertenece a la transaccion, no al proveedor.
+--    - Los CHECK de montos validan el calculo hecho en la capa de dominio.
+-- ============================================================================
+
+
+-- ----------------------------------------------------------------------------
+-- 1. LIMPIEZA (orden inverso de dependencias)
+-- ----------------------------------------------------------------------------
+DROP TABLE LOG_SISTEMA     CASCADE CONSTRAINTS;
+DROP TABLE PAGO            CASCADE CONSTRAINTS;
+DROP TABLE MEDIO_PAGO      CASCADE CONSTRAINTS;
+DROP TABLE DETALLE_PEDIDO  CASCADE CONSTRAINTS;
+DROP TABLE PEDIDO          CASCADE CONSTRAINTS;
+DROP TABLE ITEM_CARRITO    CASCADE CONSTRAINTS;
+DROP TABLE CARRITO         CASCADE CONSTRAINTS;
+DROP TABLE PRODUCTO        CASCADE CONSTRAINTS;
+DROP TABLE ADMINISTRADOR   CASCADE CONSTRAINTS;
+DROP TABLE CLIENTE         CASCADE CONSTRAINTS;
+DROP TABLE USUARIO_SISTEMA CASCADE CONSTRAINTS;
+
+
+-- ----------------------------------------------------------------------------
+-- 2. TABLAS
+-- ----------------------------------------------------------------------------
+
+-- Autenticacion centralizada. Los tres perfiles provienen de la ERS 2.3.
+CREATE TABLE USUARIO_SISTEMA (
+    ID_USUARIO     NUMBER          GENERATED ALWAYS AS IDENTITY,
+    USERNAME       VARCHAR2(50)    NOT NULL,
+    PASSWORD_HASH  VARCHAR2(255)   NOT NULL,
+    TIPO_USUARIO   VARCHAR2(20)    NOT NULL,
+    ACTIVO         CHAR(1)         DEFAULT 'S' NOT NULL,
+    CONSTRAINT PK_USUARIO_SISTEMA   PRIMARY KEY (ID_USUARIO),
+    CONSTRAINT UQ_USUARIO_USERNAME  UNIQUE (USERNAME),
+    CONSTRAINT CK_USUARIO_TIPO      CHECK (TIPO_USUARIO IN ('CLIENTE','ADMINISTRATIVO','ADMINISTRADOR')),
+    CONSTRAINT CK_USUARIO_ACTIVO    CHECK (ACTIVO IN ('S','N'))
+);
+
+CREATE TABLE CLIENTE (
+    ID_CLIENTE             NUMBER         GENERATED ALWAYS AS IDENTITY,
+    ID_USUARIO             NUMBER         NOT NULL,
+    NOMBRE                 VARCHAR2(100)  NOT NULL,
+    EMAIL                  VARCHAR2(150)  NOT NULL,
+    DIRECCION_POR_DEFECTO  VARCHAR2(250),
+    CONSTRAINT PK_CLIENTE          PRIMARY KEY (ID_CLIENTE),
+    CONSTRAINT UQ_CLIENTE_USUARIO  UNIQUE (ID_USUARIO),
+    CONSTRAINT UQ_CLIENTE_EMAIL    UNIQUE (EMAIL),
+    CONSTRAINT FK_CLIENTE_USUARIO  FOREIGN KEY (ID_USUARIO)
+        REFERENCES USUARIO_SISTEMA (ID_USUARIO)
+);
+
+CREATE TABLE ADMINISTRADOR (
+    ID_ADMIN    NUMBER         GENERATED ALWAYS AS IDENTITY,
+    ID_USUARIO  NUMBER         NOT NULL,
+    NOMBRE      VARCHAR2(100)  NOT NULL,
+    EMAIL       VARCHAR2(150)  NOT NULL,
+    ROL         VARCHAR2(50)   NOT NULL,
+    CONSTRAINT PK_ADMINISTRADOR   PRIMARY KEY (ID_ADMIN),
+    CONSTRAINT UQ_ADMIN_USUARIO   UNIQUE (ID_USUARIO),
+    CONSTRAINT UQ_ADMIN_EMAIL     UNIQUE (EMAIL),
+    CONSTRAINT FK_ADMIN_USUARIO   FOREIGN KEY (ID_USUARIO)
+        REFERENCES USUARIO_SISTEMA (ID_USUARIO)
+);
+
+CREATE TABLE PRODUCTO (
+    ID_PRODUCTO  NUMBER         GENERATED ALWAYS AS IDENTITY,
+    NOMBRE       VARCHAR2(150)  NOT NULL,
+    DESCRIPCION  VARCHAR2(500),
+    PRECIO       NUMBER(12,2)   NOT NULL,
+    STOCK        NUMBER(8)      DEFAULT 0 NOT NULL,
+    CATEGORIA    VARCHAR2(80),
+    CONSTRAINT PK_PRODUCTO         PRIMARY KEY (ID_PRODUCTO),
+    CONSTRAINT CK_PRODUCTO_PRECIO  CHECK (PRECIO >= 0),
+    CONSTRAINT CK_PRODUCTO_STOCK   CHECK (STOCK >= 0)
+);
+
+-- Carrito temporal del cliente. Un cliente puede tener varios a lo largo del
+-- tiempo, pero solo uno en estado ACTIVO (ver indice UX_CARRITO_ACTIVO).
+CREATE TABLE CARRITO (
+    ID_CARRITO      NUMBER        GENERATED ALWAYS AS IDENTITY,
+    ID_CLIENTE      NUMBER        NOT NULL,
+    FECHA_CREACION  DATE          DEFAULT SYSDATE NOT NULL,
+    ESTADO          VARCHAR2(20)  DEFAULT 'ACTIVO' NOT NULL,
+    CONSTRAINT PK_CARRITO          PRIMARY KEY (ID_CARRITO),
+    CONSTRAINT FK_CARRITO_CLIENTE  FOREIGN KEY (ID_CLIENTE)
+        REFERENCES CLIENTE (ID_CLIENTE),
+    CONSTRAINT CK_CARRITO_ESTADO   CHECK (ESTADO IN ('ACTIVO','CONVERTIDO','ABANDONADO'))
+);
+
+-- El subtotal NO se almacena: se calcula con el precio vigente del producto.
+CREATE TABLE ITEM_CARRITO (
+    ID_ITEM      NUMBER     GENERATED ALWAYS AS IDENTITY,
+    ID_CARRITO   NUMBER     NOT NULL,
+    ID_PRODUCTO  NUMBER     NOT NULL,
+    CANTIDAD     NUMBER(6)  NOT NULL,
+    CONSTRAINT PK_ITEM_CARRITO      PRIMARY KEY (ID_ITEM),
+    CONSTRAINT FK_ITEM_CARRITO      FOREIGN KEY (ID_CARRITO)
+        REFERENCES CARRITO (ID_CARRITO) ON DELETE CASCADE,
+    CONSTRAINT FK_ITEM_PRODUCTO     FOREIGN KEY (ID_PRODUCTO)
+        REFERENCES PRODUCTO (ID_PRODUCTO),
+    CONSTRAINT UQ_ITEM_CARRITO_PROD UNIQUE (ID_CARRITO, ID_PRODUCTO),
+    CONSTRAINT CK_ITEM_CANTIDAD     CHECK (CANTIDAD > 0)
+);
+
+-- RF008: el total incluye impuestos y gastos de envio (Medida 4 del ATAM).
+-- El calculo lo realiza la capa de dominio; el CHECK lo valida.
+-- No se permite borrar pedidos: se anulan con ESTADO = 'ANULADO'.
+CREATE TABLE PEDIDO (
+    ID_PEDIDO        NUMBER         GENERATED ALWAYS AS IDENTITY,
+    ID_CLIENTE       NUMBER         NOT NULL,
+    FECHA            DATE           DEFAULT SYSDATE NOT NULL,
+    ESTADO           VARCHAR2(20)   DEFAULT 'PENDIENTE' NOT NULL,
+    DIRECCION_ENVIO  VARCHAR2(250)  NOT NULL,
+    SUBTOTAL         NUMBER(12,2)   NOT NULL,
+    IMPUESTO         NUMBER(12,2)   DEFAULT 0 NOT NULL,
+    COSTO_ENVIO      NUMBER(12,2)   DEFAULT 0 NOT NULL,
+    TOTAL            NUMBER(12,2)   NOT NULL,
+    CONSTRAINT PK_PEDIDO          PRIMARY KEY (ID_PEDIDO),
+    CONSTRAINT FK_PEDIDO_CLIENTE  FOREIGN KEY (ID_CLIENTE)
+        REFERENCES CLIENTE (ID_CLIENTE),
+    CONSTRAINT CK_PEDIDO_ESTADO   CHECK (ESTADO IN
+        ('PENDIENTE','PAGADO','EN_PREPARACION','DESPACHADO','ENTREGADO','ANULADO')),
+    CONSTRAINT CK_PEDIDO_MONTOS   CHECK (SUBTOTAL >= 0 AND IMPUESTO >= 0
+        AND COSTO_ENVIO >= 0 AND TOTAL >= 0),
+    CONSTRAINT CK_PEDIDO_TOTAL    CHECK (TOTAL = SUBTOTAL + IMPUESTO + COSTO_ENVIO)
+);
+
+-- PRECIO_UNITARIO queda congelado: el pedido no cambia si el producto sube de precio.
+-- Sin ON DELETE CASCADE: un registro de venta no se borra.
+CREATE TABLE DETALLE_PEDIDO (
+    ID_DETALLE       NUMBER        GENERATED ALWAYS AS IDENTITY,
+    ID_PEDIDO        NUMBER        NOT NULL,
+    ID_PRODUCTO      NUMBER        NOT NULL,
+    CANTIDAD         NUMBER(6)     NOT NULL,
+    PRECIO_UNITARIO  NUMBER(12,2)  NOT NULL,
+    SUBTOTAL         NUMBER(12,2)  NOT NULL,
+    CONSTRAINT PK_DETALLE_PEDIDO    PRIMARY KEY (ID_DETALLE),
+    CONSTRAINT FK_DETALLE_PEDIDO    FOREIGN KEY (ID_PEDIDO)
+        REFERENCES PEDIDO (ID_PEDIDO),
+    CONSTRAINT FK_DETALLE_PRODUCTO  FOREIGN KEY (ID_PRODUCTO)
+        REFERENCES PRODUCTO (ID_PRODUCTO),
+    CONSTRAINT CK_DETALLE_CANTIDAD  CHECK (CANTIDAD > 0),
+    CONSTRAINT CK_DETALLE_PRECIO    CHECK (PRECIO_UNITARIO >= 0),
+    CONSTRAINT CK_DETALLE_SUBTOTAL  CHECK (SUBTOTAL = CANTIDAD * PRECIO_UNITARIO)
+);
+
+-- Catalogo de proveedores de pago. Restriccion 8 del ATAM: solo Transbank y PayPal.
+CREATE TABLE MEDIO_PAGO (
+    ID_MEDIO_PAGO  NUMBER        GENERATED ALWAYS AS IDENTITY,
+    TIPO           VARCHAR2(30)  NOT NULL,
+    ESTADO         VARCHAR2(20)  DEFAULT 'ACTIVO' NOT NULL,
+    CONSTRAINT PK_MEDIO_PAGO   PRIMARY KEY (ID_MEDIO_PAGO),
+    CONSTRAINT UQ_MEDIO_TIPO   UNIQUE (TIPO),
+    CONSTRAINT CK_MEDIO_TIPO   CHECK (TIPO IN ('TRANSBANK','PAYPAL')),
+    CONSTRAINT CK_MEDIO_ESTADO CHECK (ESTADO IN ('ACTIVO','INACTIVO'))
+);
+
+-- El token pertenece a la transaccion, no al proveedor.
+CREATE TABLE PAGO (
+    ID_PAGO            NUMBER        GENERATED ALWAYS AS IDENTITY,
+    ID_PEDIDO          NUMBER        NOT NULL,
+    ID_MEDIO_PAGO      NUMBER        NOT NULL,
+    TOKEN_TRANSACCION  VARCHAR2(255),
+    MONTO              NUMBER(12,2)  NOT NULL,
+    FECHA              DATE          DEFAULT SYSDATE NOT NULL,
+    ESTADO             VARCHAR2(20)  DEFAULT 'PENDIENTE' NOT NULL,
+    CONSTRAINT PK_PAGO         PRIMARY KEY (ID_PAGO),
+    CONSTRAINT FK_PAGO_PEDIDO  FOREIGN KEY (ID_PEDIDO)
+        REFERENCES PEDIDO (ID_PEDIDO),
+    CONSTRAINT FK_PAGO_MEDIO   FOREIGN KEY (ID_MEDIO_PAGO)
+        REFERENCES MEDIO_PAGO (ID_MEDIO_PAGO),
+    CONSTRAINT CK_PAGO_ESTADO  CHECK (ESTADO IN ('PENDIENTE','APROBADO','RECHAZADO')),
+    CONSTRAINT CK_PAGO_MONTO   CHECK (MONTO >= 0)
+);
+
+-- Escenario 6: traza suficiente para diagnosticar un error en menos de 10 minutos.
+-- Se llama LOG_SISTEMA porque LOG es una funcion reservada de Oracle.
+CREATE TABLE LOG_SISTEMA (
+    ID_LOG      NUMBER        GENERATED ALWAYS AS IDENTITY,
+    FECHA_HORA  TIMESTAMP     DEFAULT SYSTIMESTAMP NOT NULL,
+    TIPO        VARCHAR2(20)  NOT NULL,
+    MENSAJE     VARCHAR2(500) NOT NULL,
+    TRAZA       CLOB,
+    CONSTRAINT PK_LOG       PRIMARY KEY (ID_LOG),
+    CONSTRAINT CK_LOG_TIPO  CHECK (TIPO IN ('ERROR','ADVERTENCIA','INFO'))
+);
+
+
+-- ----------------------------------------------------------------------------
+-- 3. INDICES
+--    Apoyan el Escenario 3: respuesta bajo 1 segundo con 100 usuarios.
+--    Las FK no generan indice automatico en Oracle; las UNIQUE si.
+-- ----------------------------------------------------------------------------
+CREATE INDEX IX_PEDIDO_CLIENTE     ON PEDIDO (ID_CLIENTE);
+CREATE INDEX IX_PEDIDO_FECHA       ON PEDIDO (FECHA);
+CREATE INDEX IX_DETALLE_PED        ON DETALLE_PEDIDO (ID_PEDIDO);
+CREATE INDEX IX_DETALLE_PROD       ON DETALLE_PEDIDO (ID_PRODUCTO);
+CREATE INDEX IX_ITEM_PRODUCTO      ON ITEM_CARRITO (ID_PRODUCTO);
+CREATE INDEX IX_CARRITO_CLIENTE    ON CARRITO (ID_CLIENTE);
+CREATE INDEX IX_PRODUCTO_CATEGORIA ON PRODUCTO (CATEGORIA);
+CREATE INDEX IX_PAGO_PEDIDO        ON PAGO (ID_PEDIDO);
+CREATE INDEX IX_LOG_FECHA          ON LOG_SISTEMA (FECHA_HORA);
+
+-- Un cliente puede tener muchos carritos historicos, pero solo uno ACTIVO.
+CREATE UNIQUE INDEX UX_CARRITO_ACTIVO
+    ON CARRITO (CASE WHEN ESTADO = 'ACTIVO' THEN ID_CLIENTE END);
+
+
+-- ----------------------------------------------------------------------------
+-- 4. DATOS DE PRUEBA
+-- ----------------------------------------------------------------------------
+INSERT INTO USUARIO_SISTEMA (USERNAME, PASSWORD_HASH, TIPO_USUARIO)
+    VALUES ('admin', 'HASH_DEMO_ADMIN', 'ADMINISTRADOR');
+INSERT INTO USUARIO_SISTEMA (USERNAME, PASSWORD_HASH, TIPO_USUARIO)
+    VALUES ('jperez', 'HASH_DEMO_CLIENTE', 'CLIENTE');
+
+INSERT INTO ADMINISTRADOR (ID_USUARIO, NOMBRE, EMAIL, ROL)
+    VALUES (1, 'Ana Soto', 'ana.soto@egesven.cl', 'ADMIN_SISTEMA');
+
+INSERT INTO CLIENTE (ID_USUARIO, NOMBRE, EMAIL, DIRECCION_POR_DEFECTO)
+    VALUES (2, 'Juan Perez', 'juan.perez@correo.cl', 'Av. Siempre Viva 742, Arica');
+
+INSERT INTO PRODUCTO (NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA)
+    VALUES ('Teclado mecanico', 'Teclado retroiluminado switch azul', 39990, 25, 'Perifericos');
+INSERT INTO PRODUCTO (NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA)
+    VALUES ('Mouse inalambrico', 'Mouse optico 1600 DPI', 14990, 40, 'Perifericos');
+INSERT INTO PRODUCTO (NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA)
+    VALUES ('Monitor 24 pulgadas', 'Monitor IPS Full HD 75Hz', 129990, 10, 'Monitores');
+
+INSERT INTO MEDIO_PAGO (TIPO, ESTADO) VALUES ('TRANSBANK', 'ACTIVO');
+INSERT INTO MEDIO_PAGO (TIPO, ESTADO) VALUES ('PAYPAL',    'ACTIVO');
+
+COMMIT;
+
+
+-- ----------------------------------------------------------------------------
+-- 5. VERIFICACION
+-- ----------------------------------------------------------------------------
+SELECT TABLE_NAME FROM USER_TABLES ORDER BY TABLE_NAME;
