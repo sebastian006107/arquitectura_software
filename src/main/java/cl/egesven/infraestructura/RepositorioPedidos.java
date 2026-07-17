@@ -181,4 +181,21 @@ public class RepositorioPedidos {
         p.setTotal(rs.getBigDecimal("TOTAL"));
         return p;
     }
+
+    public int buscarIdMedioPago(String tipo) {
+        String sql = "SELECT ID_MEDIO_PAGO FROM MEDIO_PAGO WHERE TIPO = ? AND ESTADO = 'ACTIVO'";
+        try (Connection conn = Conexion.getInstancia().getConexion();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tipo.toUpperCase());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt("ID_MEDIO_PAGO");
+                }
+            }
+        } catch (SQLException e) {
+            Logger.registrar("ERROR", "Error al buscar medio de pago: " + tipo, e);
+            throw new RuntimeException("Error al buscar medio de pago: " + e.getMessage(), e);
+        }
+        throw new RuntimeException("Medio de pago no encontrado o inactivo: " + tipo);
+    }
 }

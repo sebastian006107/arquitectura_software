@@ -168,4 +168,19 @@ public class RepositorioClientes {
         }
         return false;
     }
+
+    public void actualizarPasswordHash(String username, String hash) {
+        String sql = "UPDATE USUARIO_SISTEMA SET PASSWORD_HASH = ? WHERE USERNAME = ?";
+        try (Connection conn = Conexion.getInstancia().getConexion();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, hash);
+            ps.setString(2, username);
+            ps.executeUpdate();
+            conn.commit();
+        } catch (SQLException e) {
+            Logger.registrar("ERROR", "Error al actualizar hash para: " + username, e);
+            try { Conexion.getInstancia().getConexion().rollback(); } catch (SQLException ignored) {}
+            throw new RuntimeException("Error al actualizar password: " + e.getMessage(), e);
+        }
+    }
 }

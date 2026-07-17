@@ -1,23 +1,22 @@
 package cl.egesven.presentacion;
 
 import cl.egesven.aplicacion.ServicioCarrito;
+import cl.egesven.aplicacion.ServicioMFA;
 import cl.egesven.aplicacion.ServicioPedidos;
 import cl.egesven.aplicacion.ServicioProductos;
 import cl.egesven.aplicacion.ServicioUsuarios;
+import cl.egesven.dominio.Log;
 import cl.egesven.dominio.Pedido;
 import cl.egesven.infraestructura.Conexion;
 import cl.egesven.infraestructura.Logger;
 
-import java.security.MessageDigest;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.Timestamp;
-import java.util.Base64;
+import java.util.List;
 import java.util.Scanner;
 
 public class Menu {
 
     private final ServicioUsuarios servicioUsuarios;
+    private final ServicioMFA servicioMFA;
     private final ServicioProductos servicioProductos;
     private final ServicioCarrito servicioCarrito;
     private final ServicioPedidos servicioPedidos;
@@ -29,6 +28,7 @@ public class Menu {
 
     public Menu() {
         this.servicioUsuarios = new ServicioUsuarios();
+        this.servicioMFA = new ServicioMFA();
         this.servicioProductos = new ServicioProductos();
         this.servicioCarrito = new ServicioCarrito();
         this.servicioPedidos = new ServicioPedidos();
@@ -63,7 +63,7 @@ public class Menu {
         String opcion = scanner.nextLine().trim();
         switch (opcion) {
             case "1" -> {
-                PantallaLogin login = new PantallaLogin(servicioUsuarios, scanner);
+                PantallaLogin login = new PantallaLogin(servicioUsuarios, servicioMFA, scanner);
                 sesion = login.mostrar();
             }
             case "2" -> {
@@ -175,47 +175,22 @@ public class Menu {
 
     private void revisarLogs() {
         System.out.println("\n========== LOGS DEL SISTEMA (ultimos 20) ==========");
-        String sql = "SELECT FECHA_HORA, TIPO, MENSAJE FROM LOG_SISTEMA ORDER BY FECHA_HORA DESC FETCH FIRST 20 ROWS ONLY";
-        try (PreparedStatement ps = Conexion.getInstancia().getConexion().prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            int count = 0;
-            while (rs.next()) {
-                Timestamp ts = rs.getTimestamp("FECHA_HORA");
-                String tipo = rs.getString("TIPO");
-                String mensaje = rs.getString("MENSAJE");
-                System.out.printf("  [%s] %s | %s%n",
-                        ts != null ? ts.toLocalDateTime().toString().substring(0, 19) : "N/A",
-                        tipo, mensaje);
-                count++;
-            }
-            if (count == 0) {
-                System.out.println("No hay registros en el log.");
-            }
-        } catch (Exception e) {
-            System.out.println("[ERROR] No se pudieron leer los logs: " + e.getMessage());
+        List<Log> logs = Logger.leerUltimos(20);
+        if (logs.isEmpty()) {
+            System.out.println("No hay registros en el log.");
+            return;
+        }
+        for (Log log : logs) {
+            System.out.printf("  [%s] %s | %s%n",
+                    log.getFechaHora() != null ? log.getFechaHora().toString().substring(0, 19) : "N/A",
+                    log.getTipo(), log.getMensaje());
         }
     }
 
     private void actualizarHashesDemo() {
         try {
-            String sql = "UPDATE USUARIO_SISTEMA SET PASSWORD_HASH = ? WHERE USERNAME = ?";
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-
-            String adminHash = Base64.getEncoder().encodeToString(md.digest("admin123".getBytes()));
-            try (PreparedStatement ps = Conexion.getInstancia().getConexion().prepareStatement(sql)) {
-                ps.setString(1, adminHash);
-                ps.setString(2, "admin");
-                ps.executeUpdate();
-            }
-
-            String clienteHash = Base64.getEncoder().encodeToString(md.digest("cliente123".getBytes()));
-            try (PreparedStatement ps = Conexion.getInstancia().getConexion().prepareStatement(sql)) {
-                ps.setString(1, clienteHash);
-                ps.setString(2, "jperez");
-                ps.executeUpdate();
-            }
-
-            Conexion.getInstancia().getConexion().commit();
+            servicioUsuarios.actualizarPasswordDemo("admin", "admin123");
+            servicioUsuarios.actualizarPasswordDemo("jperez", "cliente123");
         } catch (Exception e) {
             System.err.println("[AVISO] No se pudieron actualizar los hashes demo: " + e.getMessage());
         }

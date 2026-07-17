@@ -103,4 +103,9 @@ public class ServicioUsuarios {
 
         repositorio.registrarCliente(cliente);
     }
+
+    public void actualizarPasswordDemo(String username, String passwordPlano) {
+        String hash = hashPassword(passwordPlano);
+        repositorio.actualizarPasswordHash(username, hash);
+    }
 }
