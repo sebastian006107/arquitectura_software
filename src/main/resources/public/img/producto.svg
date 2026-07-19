@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="300" height="300">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5ba3f5"/>
+      <stop offset="1" stop-color="#1a73e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#fondo)"/>
+  <g fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity=".95">
+    <path d="M92 122h116l-11 84a12 12 0 0 1-12 10h-70a12 12 0 0 1-12-10z"/>
+    <path d="M124 122v-16a26 26 0 0 1 52 0v16"/>
+  </g>
+  <text x="150" y="252" text-anchor="middle" fill="#fff"
+        font-family="Helvetica,Arial,sans-serif" font-size="30" font-weight="700"
+        letter-spacing="1">eGESVEN</text>
+</svg>
