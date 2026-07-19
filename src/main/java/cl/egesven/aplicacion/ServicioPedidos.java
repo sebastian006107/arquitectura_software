@@ -4,6 +4,7 @@ import cl.egesven.dominio.*;
 import cl.egesven.infraestructura.Conexion;
 import cl.egesven.infraestructura.Logger;
 import cl.egesven.infraestructura.RepositorioCarrito;
+import cl.egesven.infraestructura.RepositorioClientes;
 import cl.egesven.infraestructura.RepositorioPedidos;
 
 import java.math.BigDecimal;
@@ -15,11 +16,13 @@ public class ServicioPedidos {
 
     private final RepositorioCarrito repositorioCarrito;
     private final RepositorioPedidos repositorioPedidos;
+    private final RepositorioClientes repositorioClientes;
     private final ServicioPago servicioPago;
 
     public ServicioPedidos() {
         this.repositorioCarrito = new RepositorioCarrito();
         this.repositorioPedidos = new RepositorioPedidos();
+        this.repositorioClientes = new RepositorioClientes();
         this.servicioPago = new ServicioPago();
     }
 
@@ -80,20 +83,26 @@ public class ServicioPedidos {
 
             repositorioPedidos.registrarPago(conn, pago);
 
+            // El pago quedo APROBADO: el pedido pasa a PAGADO dentro de la misma
+            // transaccion, para que la BD no quede en PENDIENTE.
+            repositorioPedidos.actualizarEstado(conn, idPedido, "PAGADO");
+            pedido.setEstado("PAGADO");
+
             actualizarEstadoCarrito(conn, carrito.getIdCarrito());
 
             conn.commit();
 
-            pedido.setEstado("PAGADO");
             pedido.setDetalles(repositorioPedidos.obtenerDetalles(idPedido));
 
             return pedido;
 
         } catch (Exception e) {
-            Logger.registrar("ERROR", "Error al procesar compra para cliente: " + idCliente, e);
+            // El rollback va ANTES de registrar el log: el Logger comparte la misma
+            // conexion y hace commit, lo que confirmaria la transaccion fallida.
             if (conn != null) {
                 try { conn.rollback(); } catch (SQLException ignored) {}
             }
+            Logger.registrar("ERROR", "Error al procesar compra para cliente: " + idCliente, e);
             throw new RuntimeException("Error al procesar la compra: " + e.getMessage(), e);
         } finally {
             if (conn != null) {
@@ -116,6 +125,20 @@ public class ServicioPedidos {
 
     public Pedido verPedido(int idPedido) {
         return repositorioPedidos.buscarPedidoPorId(idPedido);
+    }
+
+    /**
+     * RF010: arma el recibo de un pedido ya realizado.
+     * Los montos salen del pedido persistido, no se recalculan.
+     */
+    public Recibo generarRecibo(int idPedido) {
+        Pedido pedido = repositorioPedidos.buscarPedidoPorId(idPedido);
+        if (pedido == null) {
+            throw new RuntimeException("El pedido #" + idPedido + " no existe");
+        }
+        Cliente cliente = repositorioClientes.buscarClientePorId(pedido.getIdCliente());
+        Pago pago = repositorioPedidos.buscarPagoPorPedido(idPedido);
+        return new Recibo(pedido, cliente, pago);
     }
 
     public List<Pedido> listarTodosPedidos() {

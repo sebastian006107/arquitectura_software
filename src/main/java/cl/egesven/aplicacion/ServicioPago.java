@@ -4,8 +4,6 @@ import cl.egesven.dominio.*;
 import cl.egesven.infraestructura.*;
 
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.SQLException;
 
 public class ServicioPago {
 
@@ -33,16 +31,4 @@ public class ServicioPago {
         return repositorioPedidos.buscarIdMedioPago(tipo);
     }
 
-    public BigDecimal obtenerMonto(Connection conn, int idPedido) throws SQLException {
-        String sql = "SELECT MONTO FROM PAGO WHERE ID_PEDIDO = ?";
-        try (java.sql.PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, idPedido);
-            try (java.sql.ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getBigDecimal("MONTO");
-                }
-            }
-        }
-        return BigDecimal.ZERO;
-    }
 }

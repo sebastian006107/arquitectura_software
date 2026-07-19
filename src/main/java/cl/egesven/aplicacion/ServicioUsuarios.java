@@ -3,6 +3,7 @@ package cl.egesven.aplicacion;
 import cl.egesven.dominio.Administrador;
 import cl.egesven.dominio.Cliente;
 import cl.egesven.dominio.UsuarioSistema;
+import cl.egesven.infraestructura.Logger;
 import cl.egesven.infraestructura.RepositorioClientes;
 
 import java.security.MessageDigest;
@@ -50,14 +51,17 @@ public class ServicioUsuarios {
     public Sesion login(String username, String password) {
         UsuarioSistema usuario = repositorio.buscarPorUsername(username);
         if (usuario == null) {
+            Logger.registrar("ADVERTENCIA", "Login fallido: usuario inexistente '" + username + "'", (String) null);
             throw new RuntimeException("Usuario no encontrado");
         }
         if ("N".equals(usuario.getActivo())) {
+            Logger.registrar("ADVERTENCIA", "Login rechazado: usuario desactivado '" + username + "'", (String) null);
             throw new RuntimeException("Usuario desactivado");
         }
 
         String hashIngresado = hashPassword(password);
         if (!hashIngresado.equals(usuario.getPasswordHash())) {
+            Logger.registrar("ADVERTENCIA", "Login fallido: contrasena incorrecta para '" + username + "'", (String) null);
             throw new RuntimeException("Contrasena incorrecta");
         }
 

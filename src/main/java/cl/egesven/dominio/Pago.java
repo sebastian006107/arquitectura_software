@@ -11,6 +11,8 @@ public class Pago {
     private BigDecimal monto;
     private LocalDateTime fecha;
     private String estado;
+    /** Tipo del medio de pago (TRANSBANK/PAYPAL) resuelto para mostrar en el recibo (RF010). */
+    private String tipoMedioPago;
 
     public Pago() {}
 
@@ -41,4 +43,7 @@ public class Pago {
 
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
+
+    public String getTipoMedioPago() { return tipoMedioPago; }
+    public void setTipoMedioPago(String tipoMedioPago) { this.tipoMedioPago = tipoMedioPago; }
 }

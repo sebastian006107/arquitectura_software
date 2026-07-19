@@ -155,29 +155,5 @@ public class RepositorioCarrito {
         }
     }
 
-    public void vaciarCarrito(int idCarrito) {
-        String sql = "DELETE FROM ITEM_CARRITO WHERE ID_CARRITO = ?";
-        try (Connection conn = Conexion.getInstancia().getConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, idCarrito);
-            ps.executeUpdate();
-            conn.commit();
-        } catch (SQLException e) {
-            try { Conexion.getInstancia().getConexion().rollback(); } catch (SQLException ignored) {}
-            throw new RuntimeException("Error al vaciar carrito: " + e.getMessage(), e);
-        }
-    }
 
-    public void marcarComoConvertido(int idCarrito) {
-        String sql = "UPDATE CARRITO SET ESTADO = 'CONVERTIDO' WHERE ID_CARRITO = ?";
-        try (Connection conn = Conexion.getInstancia().getConexion();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, idCarrito);
-            ps.executeUpdate();
-            conn.commit();
-        } catch (SQLException e) {
-            try { Conexion.getInstancia().getConexion().rollback(); } catch (SQLException ignored) {}
-            throw new RuntimeException("Error al marcar carrito como convertido: " + e.getMessage(), e);
-        }
-    }
 }

@@ -2,7 +2,6 @@ package cl.egesven.infraestructura;
 
 import cl.egesven.dominio.Producto;
 
-import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +23,65 @@ public class RepositorioProductos {
             throw new RuntimeException("Error al listar productos: " + e.getMessage(), e);
         }
         return productos;
+    }
+
+    /**
+     * RF005: busca por texto libre (nombre o descripcion) y/o por categoria.
+     * Ambos filtros son opcionales; si los dos vienen vacios equivale a listarTodos().
+     */
+    public List<Producto> buscar(String texto, String categoria) {
+        StringBuilder sql = new StringBuilder(
+                "SELECT ID_PRODUCTO, NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA, IMAGEN_URL " +
+                "FROM PRODUCTO WHERE 1 = 1");
+        List<String> parametros = new ArrayList<>();
+
+        if (texto != null && !texto.isBlank()) {
+            sql.append(" AND (UPPER(NOMBRE) LIKE ? OR UPPER(DESCRIPCION) LIKE ?)");
+            String patron = "%" + texto.trim().toUpperCase() + "%";
+            parametros.add(patron);
+            parametros.add(patron);
+        }
+        if (categoria != null && !categoria.isBlank()) {
+            sql.append(" AND UPPER(CATEGORIA) = ?");
+            parametros.add(categoria.trim().toUpperCase());
+        }
+        sql.append(" ORDER BY CATEGORIA, NOMBRE");
+
+        List<Producto> productos = new ArrayList<>();
+        try (Connection conn = Conexion.getInstancia().getConexion();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < parametros.size(); i++) {
+                ps.setString(i + 1, parametros.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    productos.add(mapearProducto(rs));
+                }
+            }
+        } catch (SQLException e) {
+            Logger.registrar("ERROR", "Error al buscar productos (texto=" + texto
+                    + ", categoria=" + categoria + ")", e);
+            throw new RuntimeException("Error al buscar productos: " + e.getMessage(), e);
+        }
+        return productos;
+    }
+
+    /** Alimenta el filtro por categoria de la pantalla de catalogo (RF005). */
+    public List<String> listarCategorias() {
+        List<String> categorias = new ArrayList<>();
+        String sql = "SELECT DISTINCT CATEGORIA FROM PRODUCTO " +
+                     "WHERE CATEGORIA IS NOT NULL ORDER BY CATEGORIA";
+        try (Connection conn = Conexion.getInstancia().getConexion();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                categorias.add(rs.getString("CATEGORIA"));
+            }
+        } catch (SQLException e) {
+            Logger.registrar("ERROR", "Error al listar categorias", e);
+            throw new RuntimeException("Error al listar categorias: " + e.getMessage(), e);
+        }
+        return categorias;
     }
 
     public Producto buscarPorId(int idProducto) {

@@ -32,3 +32,26 @@ button.out:hover { background: #8e0000; }
 .login-box small { color: #666; }
 .estado { font-weight: bold; padding: 2px 8px; border-radius: 3px; background: #e3f2fd; }
 hr { margin: 16px 0; border: none; border-top: 1px solid #ddd; }
+
+/* ── Buscador de catalogo (RF005) ────────────────────────── */
+.buscador { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: white; padding: 12px 16px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 16px; }
+.buscador input { flex: 1; min-width: 200px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+.buscador select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+.buscador button { padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.buscador button:hover { background: #1557b0; }
+
+/* ── Recibo (RF010) ──────────────────────────────────────── */
+.recibo { background: white; padding: 28px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-top: 16px; max-width: 620px; }
+.recibo h2 { margin-top: 0; border-bottom: 2px solid #1a73e8; padding-bottom: 8px; letter-spacing: 1px; }
+.recibo-meta { color: #555; line-height: 1.7; font-size: 0.95em; }
+.recibo-tabla { width: 100%; border-collapse: collapse; margin: 20px 0; }
+.recibo-tabla th { text-align: left; border-bottom: 1px solid #ddd; padding: 8px 6px; font-size: 0.85em; text-transform: uppercase; color: #666; }
+.recibo-tabla td { padding: 8px 6px; border-bottom: 1px solid #f0f0f0; }
+.recibo-tabla .num, .recibo-totales .num { text-align: right; }
+.recibo-totales { width: 100%; border-collapse: collapse; }
+.recibo-totales td { padding: 4px 6px; }
+.recibo-totales .total td { border-top: 2px solid #333; padding-top: 8px; font-size: 1.15em; color: #1a73e8; }
+.recibo-pago { margin-top: 20px; padding-top: 16px; border-top: 1px dashed #ccc; color: #555; line-height: 1.7; }
+.recibo-pago code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+.recibo button { margin-top: 16px; padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; }
+@media print { #nav, .recibo button, button.out { display: none; } .recibo { box-shadow: none; } }

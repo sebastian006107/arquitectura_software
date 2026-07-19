@@ -1,7 +1,6 @@
 package cl.egesven.aplicacion;
 
 import cl.egesven.dominio.Carrito;
-import cl.egesven.dominio.ItemCarrito;
 import cl.egesven.infraestructura.RepositorioCarrito;
 
 public class ServicioCarrito {

@@ -114,6 +114,30 @@ public class RepositorioClientes {
         return null;
     }
 
+    /** Datos del comprador para encabezar el recibo (RF010). */
+    public Cliente buscarClientePorId(int idCliente) {
+        String sql = "SELECT ID_CLIENTE, ID_USUARIO, NOMBRE, EMAIL, DIRECCION_POR_DEFECTO " +
+                     "FROM CLIENTE WHERE ID_CLIENTE = ?";
+        try (Connection conn = Conexion.getInstancia().getConexion();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, idCliente);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Cliente c = new Cliente();
+                    c.setIdCliente(rs.getInt("ID_CLIENTE"));
+                    c.setIdUsuario(rs.getInt("ID_USUARIO"));
+                    c.setNombre(rs.getString("NOMBRE"));
+                    c.setEmail(rs.getString("EMAIL"));
+                    c.setDireccionPorDefecto(rs.getString("DIRECCION_POR_DEFECTO"));
+                    return c;
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Error al buscar cliente: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
     public Administrador buscarAdminPorIdUsuario(int idUsuario) {
         String sql = "SELECT ID_ADMIN, ID_USUARIO, NOMBRE, EMAIL, ROL " +
                      "FROM ADMINISTRADOR WHERE ID_USUARIO = ?";

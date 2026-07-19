@@ -21,14 +21,6 @@ public class Pedido {
         this.detalles = new ArrayList<>();
     }
 
-    public String obtenerResumen() {
-        return String.format(
-                "Pedido #%d | %s | Fecha: %s | Estado: %s | Total: $%,.0f",
-                idPedido, direccionEnvio,
-                fecha != null ? fecha.toLocalDate() : "N/A",
-                estado, total);
-    }
-
     public int getIdPedido() { return idPedido; }
     public void setIdPedido(int idPedido) { this.idPedido = idPedido; }
 

@@ -2,21 +2,34 @@ package cl.egesven.web;
 
 import cl.egesven.aplicacion.*;
 import cl.egesven.dominio.*;
-import cl.egesven.infraestructura.Conexion;
 import cl.egesven.infraestructura.Logger;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializer;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static spark.Spark.*;
 
 public class AppWeb {
 
-    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private static final DateTimeFormatter FORMATO_FECHA =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+    // Gson no serializa LocalDateTime por si solo y en Java 17 el sistema de modulos
+    // impide que lo haga por reflexion: sin este adaptador, /api/pedidos y /api/logs
+    // responden HTTP 500.
+    private static final Gson gson = new GsonBuilder()
+            .setPrettyPrinting()
+            .registerTypeAdapter(LocalDateTime.class,
+                    (JsonSerializer<LocalDateTime>) (fecha, tipo, contexto) ->
+                            new JsonPrimitive(fecha.format(FORMATO_FECHA)))
+            .create();
     private static final ServicioUsuarios servicioUsuarios = new ServicioUsuarios();
     private static final ServicioMFA servicioMFA = new ServicioMFA();
     private static final ServicioProductos servicioProductos = new ServicioProductos();
@@ -95,9 +108,21 @@ public class AppWeb {
         });
 
         // ── Productos ──────────────────────────────────
+        // RF004 sin filtros; RF005 cuando llega ?q= y/o ?categoria=
         get("/api/productos", (req, res) -> {
             res.type("application/json");
-            return gson.toJson(servicioProductos.listarProductos());
+            String texto = req.queryParams("q");
+            String categoria = req.queryParams("categoria");
+            boolean sinFiltros = (texto == null || texto.isBlank())
+                    && (categoria == null || categoria.isBlank());
+            return gson.toJson(sinFiltros
+                    ? servicioProductos.listarProductos()
+                    : servicioProductos.buscarProductos(texto, categoria));
+        });
+
+        get("/api/categorias", (req, res) -> {
+            res.type("application/json");
+            return gson.toJson(servicioProductos.listarCategorias());
         });
 
         post("/api/productos", (req, res) -> {
@@ -220,6 +245,44 @@ public class AppWeb {
             if (sesion == null) { res.status(403); return gson.toJson(Map.of("error", "No autorizado")); }
             res.type("application/json");
             return gson.toJson(servicioPedidos.verPedido(Integer.parseInt(req.params(":id"))));
+        });
+
+        // RF010: recibo de un pedido. El cliente solo ve los suyos; el admin, todos.
+        get("/api/pedidos/:id/recibo", (req, res) -> {
+            if (sesion == null) {
+                res.status(403);
+                return gson.toJson(Map.of("error", "No autorizado"));
+            }
+            res.type("application/json");
+            try {
+                Recibo recibo = servicioPedidos.generarRecibo(Integer.parseInt(req.params(":id")));
+                if (!sesion.esAdmin()
+                        && (sesion.getCliente() == null
+                            || sesion.getCliente().getIdCliente() != recibo.getIdCliente())) {
+                    res.status(403);
+                    return gson.toJson(Map.of("error", "No autorizado"));
+                }
+                Map<String, Object> salida = new LinkedHashMap<>();
+                salida.put("numero", recibo.getNumero());
+                salida.put("idPedido", recibo.getIdPedido());
+                salida.put("fechaEmision", recibo.getFechaEmision());
+                salida.put("nombreCliente", recibo.getNombreCliente());
+                salida.put("emailCliente", recibo.getEmailCliente());
+                salida.put("direccionEnvio", recibo.getDireccionEnvio());
+                salida.put("estadoPedido", recibo.getEstadoPedido());
+                salida.put("detalles", recibo.getDetalles());
+                salida.put("subtotal", recibo.getSubtotal());
+                salida.put("impuesto", recibo.getImpuesto());
+                salida.put("costoEnvio", recibo.getCostoEnvio());
+                salida.put("total", recibo.getTotal());
+                salida.put("medioPago", recibo.getMedioPago());
+                salida.put("estadoPago", recibo.getEstadoPago());
+                salida.put("tokenTransaccion", recibo.getTokenTransaccion());
+                return gson.toJson(salida);
+            } catch (RuntimeException e) {
+                res.status(404);
+                return gson.toJson(Map.of("error", e.getMessage()));
+            }
         });
 
         put("/api/pedidos/:id/estado", (req, res) -> {

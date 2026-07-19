@@ -18,6 +18,15 @@ public class ServicioProductos {
         return repositorio.listarTodos();
     }
 
+    /** RF005: busqueda por texto libre y/o categoria. */
+    public List<Producto> buscarProductos(String texto, String categoria) {
+        return repositorio.buscar(texto, categoria);
+    }
+
+    public List<String> listarCategorias() {
+        return repositorio.listarCategorias();
+    }
+
     public Producto buscarPorId(int idProducto) {
         Producto p = repositorio.buscarPorId(idProducto);
         if (p == null) {

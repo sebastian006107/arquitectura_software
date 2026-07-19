@@ -108,9 +108,39 @@ async function mostrarProductosCliente() {
     await cargarCatalogo();
 }
 
+// RF005: filtros activos del catalogo
+let filtros = { q: '', categoria: '' };
+
 async function cargarCatalogo() {
-    const productos = await api('/api/productos');
-    let html = `<h2>Catalogo — ${sesion.nombre}</h2><div class="grid">`;
+    const params = new URLSearchParams();
+    if (filtros.q) params.set('q', filtros.q);
+    if (filtros.categoria) params.set('categoria', filtros.categoria);
+    const query = params.toString();
+
+    const [productos, categorias] = await Promise.all([
+        api('/api/productos' + (query ? '?' + query : '')),
+        api('/api/categorias')
+    ]);
+
+    let html = `<h2>Catalogo — ${sesion.nombre}</h2>
+        <div class="buscador">
+            <input id="bus-q" placeholder="Buscar por nombre o descripcion"
+                   value="${filtros.q}" onkeydown="if(event.key==='Enter')buscar()">
+            <select id="bus-cat">
+                <option value="">Todas las categorias</option>
+                ${categorias.map(c =>
+                    `<option value="${c}" ${filtros.categoria === c ? 'selected' : ''}>${c}</option>`
+                ).join('')}
+            </select>
+            <button onclick="buscar()">Buscar</button>
+            ${(filtros.q || filtros.categoria)
+                ? '<button class="out" onclick="limpiarBusqueda()">Limpiar</button>' : ''}
+        </div>`;
+
+    if (!productos.length) {
+        html += '<p>No se encontraron productos con esos criterios.</p>';
+    }
+    html += '<div class="grid">';
     productos.forEach(p => {
         html += `<div class="card">
             ${p.imagenUrl ? `<img class="prod-img clickable" src="${p.imagenUrl}" alt="${p.nombre}" onclick="mostrarDetalleProducto(${p.idProducto})">` : ''}
@@ -126,6 +156,19 @@ async function cargarCatalogo() {
     });
     html += '</div>';
     render(html);
+}
+
+function buscar() {
+    filtros = {
+        q: document.getElementById('bus-q').value.trim(),
+        categoria: document.getElementById('bus-cat').value
+    };
+    cargarCatalogo();
+}
+
+function limpiarBusqueda() {
+    filtros = { q: '', categoria: '' };
+    cargarCatalogo();
 }
 
 async function mostrarDetalleProducto(idProducto) {
@@ -210,10 +253,13 @@ async function mostrarPedidos() {
     if (!pedidos.length) { html += '<p>No tienes pedidos.</p>'; }
     else {
         pedidos.forEach(p => {
-            html += `<div class="card" style="cursor:pointer" onclick="verDetallePedido(${p.idPedido})">
+            html += `<div class="card">
                 <p><strong>Pedido #${p.idPedido}</strong></p>
                 <p>Estado: <span class="estado">${p.estado}</span> | Total: <strong>$${p.total ? p.total.toLocaleString() : '0'}</strong></p>
                 <small>${p.direccionEnvio || ''}</small>
+                <br>
+                <button onclick="verDetallePedido(${p.idPedido})">Ver detalle</button>
+                <button onclick="mostrarRecibo(${p.idPedido})">Ver recibo</button>
                 <div id="detalle-${p.idPedido}"></div>
             </div>`;
         });
@@ -228,13 +274,62 @@ async function verDetallePedido(idPedido) {
     let html = '<hr><strong>Items:</strong><ul>';
     if (p.detalles) {
         p.detalles.forEach(d => {
-            html += `<li>${d.cantidad}x Producto #${d.idProducto} — $${d.precioUnitario.toLocaleString()} c/u — Subtotal: $${d.subtotal.toLocaleString()}</li>`;
+            const nombre = d.nombreProducto || ('Producto #' + d.idProducto);
+            html += `<li>${d.cantidad}x ${nombre} — $${d.precioUnitario.toLocaleString()} c/u — Subtotal: $${d.subtotal.toLocaleString()}</li>`;
         });
     }
     html += `</ul>
         <p>Subtotal: $${p.subtotal.toLocaleString()} | IVA: $${p.impuesto.toLocaleString()} | Envio: $${p.costoEnvio.toLocaleString()}</p>
         <p><strong>Total: $${p.total.toLocaleString()}</strong></p>`;
     el.innerHTML = html;
+}
+
+// ═══════════════ RECIBO (RF010) ═══════════════
+async function mostrarRecibo(idPedido) {
+    const r = await api('/api/pedidos/' + idPedido + '/recibo');
+    if (r.error) return alert('Error: ' + r.error);
+
+    const volver = sesion.tipo === 'ADMINISTRADOR' ? 'mostrarAdminPedidos()' : 'mostrarPedidos()';
+    let items = '';
+    (r.detalles || []).forEach(d => {
+        const nombre = d.nombreProducto || ('Producto #' + d.idProducto);
+        items += `<tr>
+            <td>${d.cantidad}</td>
+            <td>${nombre}</td>
+            <td class="num">$${d.precioUnitario.toLocaleString()}</td>
+            <td class="num">$${d.subtotal.toLocaleString()}</td>
+        </tr>`;
+    });
+
+    render(`
+        <button class="out" onclick="${volver}">← Volver</button>
+        <div class="recibo">
+            <h2>RECIBO ${r.numero}</h2>
+            <p class="recibo-meta">
+                Emitido: ${r.fechaEmision}<br>
+                Cliente: <strong>${r.nombreCliente}</strong> (${r.emailCliente})<br>
+                Envio a: ${r.direccionEnvio}<br>
+                Estado del pedido: <span class="estado">${r.estadoPedido}</span>
+            </p>
+            <table class="recibo-tabla">
+                <thead>
+                    <tr><th>Cant.</th><th>Producto</th><th class="num">P. unitario</th><th class="num">Subtotal</th></tr>
+                </thead>
+                <tbody>${items}</tbody>
+            </table>
+            <table class="recibo-totales">
+                <tr><td>Subtotal</td><td class="num">$${r.subtotal.toLocaleString()}</td></tr>
+                <tr><td>IVA (19%)</td><td class="num">$${r.impuesto.toLocaleString()}</td></tr>
+                <tr><td>Envio</td><td class="num">$${r.costoEnvio.toLocaleString()}</td></tr>
+                <tr class="total"><td><strong>TOTAL</strong></td><td class="num"><strong>$${r.total.toLocaleString()}</strong></td></tr>
+            </table>
+            <p class="recibo-pago">
+                Pago: <strong>${r.medioPago}</strong> (${r.estadoPago})<br>
+                Token: <code>${r.tokenTransaccion}</code>
+            </p>
+            <button onclick="window.print()">Imprimir</button>
+        </div>
+    `);
 }
 
 // ═══════════════ ADMIN ═══════════════
@@ -340,6 +435,7 @@ async function mostrarAdminPedidos() {
             </select>
             <button onclick="cambiarEstado(${p.idPedido})">Actualizar</button>
             <button onclick="verDetallePedido(${p.idPedido})">Ver detalle</button>
+            <button onclick="mostrarRecibo(${p.idPedido})">Ver recibo</button>
             <div id="detalle-${p.idPedido}"></div>
         </div>`;
     });

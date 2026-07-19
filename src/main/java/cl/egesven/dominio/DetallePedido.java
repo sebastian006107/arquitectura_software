@@ -9,6 +9,8 @@ public class DetallePedido {
     private int cantidad;
     private BigDecimal precioUnitario;
     private BigDecimal subtotal;
+    /** Nombre del producto al momento de consultar; se usa en el recibo (RF010). */
+    private String nombreProducto;
 
     public DetallePedido() {}
 
@@ -36,4 +38,7 @@ public class DetallePedido {
 
     public BigDecimal getSubtotal() { return subtotal; }
     public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
+
+    public String getNombreProducto() { return nombreProducto; }
+    public void setNombreProducto(String nombreProducto) { this.nombreProducto = nombreProducto; }
 }

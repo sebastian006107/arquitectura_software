@@ -72,6 +72,48 @@ public class RepositorioPedidos {
         }
     }
 
+    /**
+     * Cambia el estado dentro de la transaccion de compra en curso (no hace commit:
+     * lo confirma quien abrio la transaccion).
+     */
+    public void actualizarEstado(Connection conn, int idPedido, String nuevoEstado) throws SQLException {
+        String sql = "UPDATE PEDIDO SET ESTADO = ? WHERE ID_PEDIDO = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, nuevoEstado);
+            ps.setInt(2, idPedido);
+            ps.executeUpdate();
+        }
+    }
+
+    /** Datos del pago asociados al pedido; alimentan el recibo (RF010). */
+    public Pago buscarPagoPorPedido(int idPedido) {
+        String sql = "SELECT g.ID_PAGO, g.ID_PEDIDO, g.ID_MEDIO_PAGO, g.TOKEN_TRANSACCION, " +
+                     "g.MONTO, g.ESTADO, m.TIPO " +
+                     "FROM PAGO g JOIN MEDIO_PAGO m ON g.ID_MEDIO_PAGO = m.ID_MEDIO_PAGO " +
+                     "WHERE g.ID_PEDIDO = ?";
+        try (Connection conn = Conexion.getInstancia().getConexion();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, idPedido);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    Pago pago = new Pago();
+                    pago.setIdPago(rs.getInt("ID_PAGO"));
+                    pago.setIdPedido(rs.getInt("ID_PEDIDO"));
+                    pago.setIdMedioPago(rs.getInt("ID_MEDIO_PAGO"));
+                    pago.setTokenTransaccion(rs.getString("TOKEN_TRANSACCION"));
+                    pago.setMonto(rs.getBigDecimal("MONTO"));
+                    pago.setEstado(rs.getString("ESTADO"));
+                    pago.setTipoMedioPago(rs.getString("TIPO"));
+                    return pago;
+                }
+            }
+        } catch (SQLException e) {
+            Logger.registrar("ERROR", "Error al buscar pago del pedido: " + idPedido, e);
+            throw new RuntimeException("Error al buscar pago: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
     public List<Pedido> listarPedidosPorCliente(int idCliente) {
         List<Pedido> pedidos = new ArrayList<>();
         String sql = "SELECT ID_PEDIDO, ID_CLIENTE, FECHA, ESTADO, DIRECCION_ENVIO, " +
@@ -114,8 +156,10 @@ public class RepositorioPedidos {
 
     public List<DetallePedido> obtenerDetalles(int idPedido) {
         List<DetallePedido> detalles = new ArrayList<>();
-        String sql = "SELECT ID_DETALLE, ID_PEDIDO, ID_PRODUCTO, CANTIDAD, " +
-                     "PRECIO_UNITARIO, SUBTOTAL FROM DETALLE_PEDIDO WHERE ID_PEDIDO = ?";
+        String sql = "SELECT d.ID_DETALLE, d.ID_PEDIDO, d.ID_PRODUCTO, d.CANTIDAD, " +
+                     "d.PRECIO_UNITARIO, d.SUBTOTAL, p.NOMBRE AS NOMBRE_PRODUCTO " +
+                     "FROM DETALLE_PEDIDO d JOIN PRODUCTO p ON d.ID_PRODUCTO = p.ID_PRODUCTO " +
+                     "WHERE d.ID_PEDIDO = ?";
         try (Connection conn = Conexion.getInstancia().getConexion();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, idPedido);
@@ -128,6 +172,7 @@ public class RepositorioPedidos {
                     d.setCantidad(rs.getInt("CANTIDAD"));
                     d.setPrecioUnitario(rs.getBigDecimal("PRECIO_UNITARIO"));
                     d.setSubtotal(rs.getBigDecimal("SUBTOTAL"));
+                    d.setNombreProducto(rs.getString("NOMBRE_PRODUCTO"));
                     detalles.add(d);
                 }
             }
