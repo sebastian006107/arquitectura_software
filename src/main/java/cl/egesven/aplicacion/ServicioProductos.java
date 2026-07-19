@@ -27,7 +27,7 @@ public class ServicioProductos {
     }
 
     public void crearProducto(String nombre, String descripcion,
-                               BigDecimal precio, int stock, String categoria) {
+                               BigDecimal precio, int stock, String categoria, String imagenUrl) {
         if (nombre == null || nombre.isBlank()) {
             throw new RuntimeException("El nombre es obligatorio");
         }
@@ -39,12 +39,13 @@ public class ServicioProductos {
         }
 
         Producto p = new Producto(nombre, descripcion, precio, stock, categoria);
+        p.setImagenUrl(imagenUrl);
         int id = repositorio.crear(p);
         p.setIdProducto(id);
     }
 
     public void actualizarProducto(int idProducto, String nombre, String descripcion,
-                                    BigDecimal precio, int stock, String categoria) {
+                                    BigDecimal precio, int stock, String categoria, String imagenUrl) {
         Producto p = repositorio.buscarPorId(idProducto);
         if (p == null) {
             throw new RuntimeException("Producto no encontrado");
@@ -55,6 +56,7 @@ public class ServicioProductos {
         p.setPrecio(precio);
         p.setStock(stock);
         p.setCategoria(categoria);
+        p.setImagenUrl(imagenUrl);
 
         repositorio.actualizar(p);
     }

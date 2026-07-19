@@ -9,6 +9,7 @@ public class Producto {
     private BigDecimal precio;
     private int stock;
     private String categoria;
+    private String imagenUrl;
 
     public Producto() {}
 
@@ -37,6 +38,9 @@ public class Producto {
 
     public String getCategoria() { return categoria; }
     public void setCategoria(String categoria) { this.categoria = categoria; }
+
+    public String getImagenUrl() { return imagenUrl; }
+    public void setImagenUrl(String imagenUrl) { this.imagenUrl = imagenUrl; }
 
     @Override
     public String toString() {

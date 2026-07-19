@@ -11,7 +11,7 @@ public class RepositorioProductos {
 
     public List<Producto> listarTodos() {
         List<Producto> productos = new ArrayList<>();
-        String sql = "SELECT ID_PRODUCTO, NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA " +
+        String sql = "SELECT ID_PRODUCTO, NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA, IMAGEN_URL " +
                      "FROM PRODUCTO ORDER BY CATEGORIA, NOMBRE";
         try (Connection conn = Conexion.getInstancia().getConexion();
              PreparedStatement ps = conn.prepareStatement(sql);
@@ -27,7 +27,7 @@ public class RepositorioProductos {
     }
 
     public Producto buscarPorId(int idProducto) {
-        String sql = "SELECT ID_PRODUCTO, NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA " +
+        String sql = "SELECT ID_PRODUCTO, NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA, IMAGEN_URL " +
                      "FROM PRODUCTO WHERE ID_PRODUCTO = ?";
         try (Connection conn = Conexion.getInstancia().getConexion();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -45,8 +45,8 @@ public class RepositorioProductos {
     }
 
     public int crear(Producto producto) {
-        String sql = "INSERT INTO PRODUCTO (NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA) " +
-                     "VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO PRODUCTO (NOMBRE, DESCRIPCION, PRECIO, STOCK, CATEGORIA, IMAGEN_URL) " +
+                     "VALUES (?, ?, ?, ?, ?, ?)";
         String[] columnasId = {"ID_PRODUCTO"};
         try (Connection conn = Conexion.getInstancia().getConexion();
              PreparedStatement ps = conn.prepareStatement(sql, columnasId)) {
@@ -55,6 +55,7 @@ public class RepositorioProductos {
             ps.setBigDecimal(3, producto.getPrecio());
             ps.setInt(4, producto.getStock());
             ps.setString(5, producto.getCategoria());
+            ps.setString(6, producto.getImagenUrl());
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -73,7 +74,7 @@ public class RepositorioProductos {
 
     public void actualizar(Producto producto) {
         String sql = "UPDATE PRODUCTO SET NOMBRE = ?, DESCRIPCION = ?, PRECIO = ?, " +
-                     "STOCK = ?, CATEGORIA = ? WHERE ID_PRODUCTO = ?";
+                     "STOCK = ?, CATEGORIA = ?, IMAGEN_URL = ? WHERE ID_PRODUCTO = ?";
         try (Connection conn = Conexion.getInstancia().getConexion();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, producto.getNombre());
@@ -81,7 +82,8 @@ public class RepositorioProductos {
             ps.setBigDecimal(3, producto.getPrecio());
             ps.setInt(4, producto.getStock());
             ps.setString(5, producto.getCategoria());
-            ps.setInt(6, producto.getIdProducto());
+            ps.setString(6, producto.getImagenUrl());
+            ps.setInt(7, producto.getIdProducto());
             int filas = ps.executeUpdate();
             conn.commit();
             if (filas == 0) {
@@ -119,6 +121,7 @@ public class RepositorioProductos {
         p.setPrecio(rs.getBigDecimal("PRECIO"));
         p.setStock(rs.getInt("STOCK"));
         p.setCategoria(rs.getString("CATEGORIA"));
+        p.setImagenUrl(rs.getString("IMAGEN_URL"));
         return p;
     }
 }

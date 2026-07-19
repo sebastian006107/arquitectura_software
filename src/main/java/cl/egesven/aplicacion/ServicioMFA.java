@@ -19,4 +19,8 @@ public class ServicioMFA {
         codigoActual = null;
         return ok;
     }
+
+    public String getCodigoActual() {
+        return codigoActual;
+    }
 }

@@ -80,7 +80,7 @@ public class PantallaProductos {
         String categoria = scanner.nextLine().trim();
 
         try {
-            servicio.crearProducto(nombre, descripcion, precio, stock, categoria);
+            servicio.crearProducto(nombre, descripcion, precio, stock, categoria, null);
             System.out.println("[OK] Producto creado exitosamente.");
         } catch (RuntimeException e) {
             System.out.println("[ERROR] " + e.getMessage());
@@ -117,7 +117,7 @@ public class PantallaProductos {
             if (!categoria.isEmpty()) p.setCategoria(categoria);
 
             servicio.actualizarProducto(id, p.getNombre(), p.getDescripcion(),
-                    p.getPrecio(), p.getStock(), p.getCategoria());
+                    p.getPrecio(), p.getStock(), p.getCategoria(), p.getImagenUrl());
             System.out.println("[OK] Producto actualizado.");
         } catch (RuntimeException e) {
             System.out.println("[ERROR] " + e.getMessage());
